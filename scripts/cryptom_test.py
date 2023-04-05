@@ -4,6 +4,7 @@ import logging
 import os
 from hummingbot.client.settings import ConnectorSetting
 from typing import Any, Dict, List, Set
+from hummingbot.core.data_type.common import OrderType, TradeType
 
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 import redis
@@ -12,16 +13,20 @@ class CryptomTestExample(ScriptStrategyBase):
     """
     CRYTOM TEST SCRIPT
     """
-    markets = {
-#        "binance": {"ETH-USDT"},
+    config={
+        "market": "cryptom",
+        "pair": "BTC-USDT"
     }
+    markets = {config["market"]: {config["pair"]}}
+
     count = 0
     status={}
-    config={}
+    
     def __init__(self,connectors: Dict[str, ConnectorSetting]):
         super().__init__(connectors)
         self.getParamsFromEnv()
         self.initRedisClient()
+
     
     def getParamsFromEnv(self):
         self.REDIS_URL=os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -50,7 +55,13 @@ class CryptomTestExample(ScriptStrategyBase):
             logging.getLogger(__name__).error("Error pop task object to redis: {0}".format(e))
             return False        
 
+    ok=False
     def on_tick(self):
+        if  self.ok==False:
+            #self.connectors["cryptom"]._place_order(1,"BTC-USDT",1.0,TradeType.BUY,OrderType.LIMIT,10000)
+            self.connectors["cryptom"].buy("BTC-USDT",1.0,10000)
+            print("place order end --------------------")
+        """
         self.pop_config()
         logging.getLogger(__name__).debug("config {}".format(self.config))
         self.logger().info("CRYTPOM SCRIPT TEST IS OK")
@@ -59,5 +70,8 @@ class CryptomTestExample(ScriptStrategyBase):
         self.status["count"]=self.count
         self.status["time"]=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.status["config"]=self.config
+        
+
         logging.getLogger(__name__).debug("status {}".format(self.status))
         self.push_status()
+        """

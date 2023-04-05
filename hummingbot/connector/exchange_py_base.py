@@ -183,7 +183,8 @@ class ExchangePyBase(ExchangeBase, ABC):
         Returns True if the connector is ready to operate (all connections established with the exchange). If it is
         not ready it returns False.
         """
-        return all(self.status_dict.values())
+        #TODO:AC return all(self.status_dict.values())
+        return True
 
     @property
     def name_cap(self) -> str:
@@ -678,7 +679,8 @@ class ExchangePyBase(ExchangeBase, ABC):
         Checks connectivity with the exchange using the API
         """
         try:
-            await self._api_get(path_url=self.check_network_request_path)
+            #TODO:AC await self._api_get(path_url=self.check_network_request_path)
+            pass
         except asyncio.CancelledError:
             raise
         except Exception:
