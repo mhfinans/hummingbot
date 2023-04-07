@@ -260,7 +260,7 @@ class CryptomExchange(ExchangePyBase):
 
     async def _place_cancel(self, order_id: int, tracked_order: InFlightOrder):
         cancel_result = await self._api_delete(
-            path_url='CONSTANTS.ORDER_PATH_URL/{}'.format(order_id),
+            path_url='{}/{}'.format(CONSTANTS.ORDER_PATH_URL, order_id),
             is_auth_required=True)
         if cancel_result.get("result").get("id") == order_id:
             return True
