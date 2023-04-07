@@ -1,13 +1,15 @@
-from datetime import datetime
 import json
 import logging
 import os
-from hummingbot.client.settings import ConnectorSetting
-from typing import Any, Dict, List, Set
-from hummingbot.core.data_type.common import OrderType, TradeType
+import time
+from typing import Dict
 
-from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 import redis
+
+from hummingbot.client.settings import ConnectorSetting
+from hummingbot.core.data_type.common import OrderType, TradeType
+from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
+
 
 class CryptomTestExample(ScriptStrategyBase):
     """
@@ -29,7 +31,7 @@ class CryptomTestExample(ScriptStrategyBase):
 
     
     def getParamsFromEnv(self):
-        self.REDIS_URL=os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        self.REDIS_URL=os.getenv("REDIS_URL", "redis://default:eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81@localhost:6379/0")
         self.TASK_ID=os.getenv("TASK_ID","task_id")
 
     def initRedisClient(self):
@@ -43,24 +45,25 @@ class CryptomTestExample(ScriptStrategyBase):
         except Exception as e:
             logging.getLogger(__name__).error("Error pushing task object to redis: {0}".format(e))
             return False
-    
+
     def pop_config(self):
         try:
             json_str=self.redis_client.get(self.TASK_ID+"_config").decode("utf-8")
             if json is not None:
                 self.config=json.loads(json_str)
-                logging.getLogger(__name__).info("config: {0}".format(self.config))
-           
+                logging.getLogger(__name__).info("config: {0}".format(self.config))           
         except Exception as e:
             logging.getLogger(__name__).error("Error pop task object to redis: {0}".format(e))
             return False        
 
     ok=False
     def on_tick(self):
-        if  self.ok==False:
-            #self.connectors["cryptom"]._place_order(1,"BTC-USDT",1.0,TradeType.BUY,OrderType.LIMIT,10000)
-            self.connectors["cryptom"].buy("BTC-USDT",1.0,10000)
-            print("place order end --------------------")
+        print(time.time())
+        # if  self.ok==False:
+             #self.connectors["cryptom"]._place_order(1,"BTC-USDT",1.0,TradeType.BUY,OrderType.LIMIT,10000)
+            # self.connectors["cryptom"].buy("BTC-USDT",1.0,10000)
+            # print("place order end --------------------")
+            # self.ok = True
         """
         self.pop_config()
         logging.getLogger(__name__).debug("config {}".format(self.config))

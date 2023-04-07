@@ -1,79 +1,111 @@
-import sys
-
-from hummingbot.core.api_throttler.data_types import RateLimit
+from hummingbot.core.api_throttler.data_types import LinkedLimitWeightPair, RateLimit
 from hummingbot.core.data_type.in_flight_order import OrderState
 
-CLIENT_ID_PREFIX = "93027a12dac34fBC"
-MAX_ID_LEN = 32
-SECONDS_TO_WAIT_TO_RECEIVE_MESSAGE = 30 * 0.8
+DEFAULT_DOMAIN = "com"
 
-DEFAULT_DOMAIN = ""
+HBOT_ORDER_ID_PREFIX = "x-XEKWYICX"
+MAX_ORDER_ID_LEN = 32
 
-# URLs
+# Base URL
+REST_URL = "https://testnet.binance.vision/api/"
+WSS_URL = "wss://testnet.binance.vision/ws"
 
-CRYPTOM_BASE_URL = ""
+PUBLIC_API_VERSION = "v3"
+PRIVATE_API_VERSION = "v3"
 
-# Doesn't include base URL as the tail is required to generate the signature
+# Public API endpoints or BinanceClient function
+TICKER_PRICE_CHANGE_PATH_URL = "/ticker/24hr"
+TICKER_BOOK_PATH_URL = "/ticker/bookTicker"
+EXCHANGE_INFO_PATH_URL = "http://localhost:9007/assets"
+PING_PATH_URL = "/ping"
+SNAPSHOT_PATH_URL = "/depth"
+SERVER_TIME_PATH_URL = "/time"
 
-CRYPTOM_SERVER_TIME_PATH = '/api/v1/public/time'
-CRYPTOM_INSTRUMENTS_PATH = 'http://localhost:9007/assets'
-CRYPTOM_TICKER_PATH = '/api/v5/market/ticker'
-CRYPTOM_ORDER_BOOK_PATH = '/api/v5/market/books'
+# Private API endpoints or BinanceClient function
+ACCOUNTS_PATH_URL = "/account"
+MY_TRADES_PATH_URL = "/myTrades"
+ORDER_PATH_URL = "http://localhost:9001/orders"
+BINANCE_USER_STREAM_PATH_URL = "/userDataStream"
 
-# Auth required
-CRYPTOM_PLACE_ORDER_PATH = "http://localhost:9001/orders"
-CRYPTOM_ORDER_DETAILS_PATH = '/api/v5/trade/order'
-CRYPTOM_ORDER_CANCEL_PATH = '/api/v5/trade/cancel-order'
-CRYPTOM_BATCH_ORDER_CANCEL_PATH = '/api/v5/trade/cancel-batch-orders'
-CRYPTOM_BALANCE_PATH = '/api/v5/account/balance'
-CRYPTOM_TRADE_FILLS_PATH = "/api/v5/trade/fills"
+WS_HEARTBEAT_TIME_INTERVAL = 30
 
-# WS
-CRYPTOM_WS_URI_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
-CRYPTOM_WS_URI_PRIVATE = "wss://ws.okx.com:8443/ws/v5/private"
+# Binance params
 
-CRYPTOM_WS_ACCOUNT_CHANNEL = "account"
-CRYPTOM_WS_ORDERS_CHANNEL = "orders"
-CRYPTOM_WS_PUBLIC_TRADES_CHANNEL = "trades"
-CRYPTOM_WS_PUBLIC_BOOKS_CHANNEL = "books"
+SIDE_BUY = 1
+SIDE_SELL = 0
 
-CRYPTOM_WS_CHANNELS = {
-    CRYPTOM_WS_ACCOUNT_CHANNEL,
-    CRYPTOM_WS_ORDERS_CHANNEL
-}
+TIME_IN_FORCE_GTC = "GTC"  # Good till cancelled
+TIME_IN_FORCE_IOC = "IOC"  # Immediate or cancel
+TIME_IN_FORCE_FOK = "FOK"  # Fill or kill
 
-WS_CONNECTION_LIMIT_ID = "WSConnection"
-WS_REQUEST_LIMIT_ID = "WSRequest"
-WS_SUBSCRIPTION_LIMIT_ID = "WSSubscription"
-WS_LOGIN_LIMIT_ID = "WSLogin"
-""""
-1 = OPEN
-2 = FILLED
-3 = PARTIAL 
-4 = CANCELLED
-"""
+# Rate Limit Type
+REQUEST_WEIGHT = "REQUEST_WEIGHT"
+ORDERS = "ORDERS"
+ORDERS_24HR = "ORDERS_24HR"
+RAW_REQUESTS = "RAW_REQUESTS"
+
+# Rate Limit time intervals
+ONE_MINUTE = 60
+ONE_SECOND = 1
+ONE_DAY = 86400
+
+MAX_REQUEST = 5000
+PING_URL = ''
+
+# Order States
 ORDER_STATE = {
     "1": OrderState.OPEN,
     "2": OrderState.FILLED,
     "3": OrderState.PARTIALLY_FILLED,
-    "4": OrderState.CANCELED,
+    "4": OrderState.CANCELED
 }
 
-NO_LIMIT = sys.maxsize
+# Websocket event types
+DIFF_EVENT_TYPE = "depthUpdate"
+TRADE_EVENT_TYPE = "trade"
 
 RATE_LIMITS = [
-    RateLimit(WS_CONNECTION_LIMIT_ID, limit=1, time_interval=1),
-    RateLimit(WS_REQUEST_LIMIT_ID, limit=100, time_interval=10),
-    RateLimit(WS_SUBSCRIPTION_LIMIT_ID, limit=240, time_interval=60 * 60),
-    RateLimit(WS_LOGIN_LIMIT_ID, limit=1, time_interval=15),
-    RateLimit(limit_id=CRYPTOM_SERVER_TIME_PATH, limit=10, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_INSTRUMENTS_PATH, limit=20, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_TICKER_PATH, limit=20, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_ORDER_BOOK_PATH, limit=20, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_PLACE_ORDER_PATH, limit=60, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_ORDER_DETAILS_PATH, limit=60, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_ORDER_CANCEL_PATH, limit=60, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_BATCH_ORDER_CANCEL_PATH, limit=300, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_BALANCE_PATH, limit=10, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_TRADE_FILLS_PATH, limit=60, time_interval=2), 
+    # Pools
+    RateLimit(limit_id=REQUEST_WEIGHT, limit=1200, time_interval=ONE_MINUTE),
+    RateLimit(limit_id=ORDERS, limit=50, time_interval=10 * ONE_SECOND),
+    RateLimit(limit_id=ORDERS_24HR, limit=160000, time_interval=ONE_DAY),
+    RateLimit(limit_id=RAW_REQUESTS, limit=6100, time_interval= 5 * ONE_MINUTE),
+    # Weighted Limits
+    RateLimit(limit_id=TICKER_PRICE_CHANGE_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 40),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=TICKER_BOOK_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 2),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=EXCHANGE_INFO_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 10),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=SNAPSHOT_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 50),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=BINANCE_USER_STREAM_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 1),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=SERVER_TIME_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 1),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=PING_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 1),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=ACCOUNTS_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 10),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=MY_TRADES_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 10),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)]),
+    RateLimit(limit_id=ORDER_PATH_URL, limit=MAX_REQUEST, time_interval=ONE_MINUTE,
+              linked_limits=[LinkedLimitWeightPair(REQUEST_WEIGHT, 2),
+                             LinkedLimitWeightPair(ORDERS, 1),
+                             LinkedLimitWeightPair(ORDERS_24HR, 1),
+                             LinkedLimitWeightPair(RAW_REQUESTS, 1)])
 ]
+
+ORDER_NOT_EXIST_ERROR_CODE = -2013
+ORDER_NOT_EXIST_MESSAGE = "Order does not exist"
+UNKNOWN_ORDER_ERROR_CODE = -2011
+UNKNOWN_ORDER_MESSAGE = "Unknown order sent"
