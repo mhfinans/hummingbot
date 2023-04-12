@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from hummingbot.connector.exchange.cryptom import cryptom_constants as CONSTANTS, cryptom_web_utils as web_utils
@@ -33,15 +34,22 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     async def _order_book_snapshot(self, trading_pair: str) -> OrderBookMessage:
         snapshot_response: Dict[str, Any] = await self._request_order_book_snapshot(trading_pair)
-        snapshot_data: Dict[str, Any] = snapshot_response['data'][0]
-        snapshot_timestamp: float = int(snapshot_data["ts"]) * 1e-3
+        snapshot_data: Dict[str, Any] = snapshot_response['result']
+        snapshot_timestamp: float = time.time()
         update_id: int = int(snapshot_timestamp)
+        bids= []
+        asks= []
+        for item in snapshot_data:
+            if item['side'] == 0: # 0 = buy, 1 = sell
+                bids.append((item['price'], item['quantity']))
+            else:
+                asks.append((item['price'], item['quantity']))
 
         order_book_message_content = {
             "trading_pair": trading_pair,
             "update_id": update_id,
-            "bids": [(bid[0], bid[1]) for bid in snapshot_data["bids"]],
-            "asks": [(ask[0], ask[1]) for ask in snapshot_data["asks"]],
+            "bids": bids,
+            "asks": asks,
         }
         snapshot_msg: OrderBookMessage = OrderBookMessage(
             OrderBookMessageType.SNAPSHOT,
@@ -59,8 +67,9 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
         :return: the response from the exchange (JSON dictionary)
         """
         params = {
-            "instId": await self._connector.exchange_symbol_associated_to_pair(trading_pair=trading_pair),
-            "sz": "400"
+            "$market":"eq@{}".format(trading_pair),
+            "$take":"1000",
+            "$sort":"[id@desc]"
         }
 
         rest_assistant = await self._api_factory.get_rest_assistant()

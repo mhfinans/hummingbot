@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 import json
 import logging
 import os
@@ -59,7 +60,9 @@ class CryptomTestExample(ScriptStrategyBase):
     def on_tick(self):
         if  self.ok==False:
             #self.connectors["cryptom"]._place_order(1,"BTC-USDT",1.0,TradeType.BUY,OrderType.LIMIT,10000)
-            self.connectors["cryptom"].buy("BTC-USDT",1.0,10000)
+
+            self.connectors["cryptom"].buy("BTC-USDT",Decimal(0.002),OrderType.LIMIT,Decimal(30000.10))
+            self.ok=True
             print("place order end --------------------")
         """
         self.pop_config()

@@ -27,7 +27,8 @@ class CryptomAuth(AuthBase):
 
         :return: The RESTRequest with auth information included
         """
-        request.headers["X-User"] = "1000"
+        request.headers["X-User"] = "47"
+        request.url=request.url.format(user_id="47")
 
         return request
 

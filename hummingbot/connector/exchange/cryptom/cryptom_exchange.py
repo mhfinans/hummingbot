@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 
 class CryptomExchange(ExchangePyBase):
+    web_utils = web_utils
 
     def __init__(self,
                  client_config_map: "ClientConfigAdapter",
@@ -153,7 +154,7 @@ class CryptomExchange(ExchangePyBase):
     def _initialize_trading_pair_symbols_from_exchange_info(self, exchange_info: Dict[str, Any]):
         mapping = bidict()
         for symbol_data in exchange_info["result"]:
-            mapping["id"] = symbol_data["name"]
+            mapping[str(symbol_data["id"])] = symbol_data["name"]
             
         self._set_trading_pair_symbol_map(mapping)
 
@@ -165,26 +166,28 @@ class CryptomExchange(ExchangePyBase):
                            order_type: OrderType,
                            price: Decimal,
                            **kwargs) -> Tuple[str, float]:
-        print("place order++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+
         data = {
             "type": 1,#LIMIT
             "side": 1 if trade_type.name.lower() == "buy" else 0,
             "market": trading_pair,
-            "quantity": amount,
-            "price": price,
+            "quantity": float(amount),
+            "price": float(price),
         }
-        exchange_order_id = await self._api_request(
-            path_url=CONSTANTS.CRYPTOM_PLACE_ORDER_PATH,
-            overwrite_url=CONSTANTS.CRYPTOM_PLACE_ORDER_PATH,
-            method=RESTMethod.POST,
-            data=data,
-            is_auth_required=False,
-            limit_id=CONSTANTS.CRYPTOM_PLACE_ORDER_PATH,
-        )
-        data = exchange_order_id["data"][0]
-        if data["sCode"] != "0":
-            raise IOError(f"Error submitting order {order_id}: {data['sMsg']}")
-        return str(data["ordId"]), self.current_timestamp
+        exchange_order_id={}
+        try:
+            exchange_order_id = await self._api_request(
+                path_url=CONSTANTS.CRYPTOM_PLACE_ORDER_PATH,
+                method=RESTMethod.POST,
+                data=data,
+                is_auth_required=True,
+            )
+        except Exception as ex:
+            print(ex)
+            raise IOError(f"Error submitting order {order_id}: {ex.args[0]}")
+
+        data = exchange_order_id["result"]
+        return str(data["id"]), self.current_timestamp
 
     async def _place_cancel(self, order_id: str, tracked_order: InFlightOrder):
         """
@@ -224,14 +227,16 @@ class CryptomExchange(ExchangePyBase):
         return float(ticker_data["last"])
 
     async def _update_balances(self):
-        msg = await self._api_request(
-            path_url=CONSTANTS.CRYPTOM_BALANCE_PATH,
-            is_auth_required=True)
+        try:
+            msg = await self._api_request(
+                path_url=CONSTANTS.CRYPTOM_BALANCE_PATH,
+                method=RESTMethod.GET,
+                is_auth_required=True)
+        except Exception as ex:            
+            print(ex)
+            raise IOError(f"Error fetching balances: {ex.args[0]}")
 
-        if msg['code'] == '0':
-            balances = msg['data'][0]['details']
-        else:
-            raise Exception(msg['msg'])
+        balances = msg['result'][0]['assets']
 
         self._account_available_balances.clear()
         self._account_balances.clear()
@@ -240,23 +245,16 @@ class CryptomExchange(ExchangePyBase):
             self._update_balance_from_details(balance_details=balance)
 
     def _update_balance_from_details(self, balance_details: Dict[str, Any]):
-        equity_text = balance_details["eq"]
-        available_equity_text = balance_details["availEq"]
-
-        if equity_text and available_equity_text:
-            total = Decimal(equity_text)
-            available = Decimal(available_equity_text)
-        else:
-            available = Decimal(balance_details["availBal"])
-            total = available + Decimal(balance_details["frozenBal"])
-        self._account_balances[balance_details["ccy"]] = total
-        self._account_available_balances[balance_details["ccy"]] = available
+        available = Decimal(balance_details["availableAmount"])
+        total = available + Decimal(balance_details["freezeAmount"])
+        self._account_balances[balance_details["assetName"]] = total
+        self._account_available_balances[balance_details["assetName"]] = available
 
     async def _update_trading_rules(self):
         # This has to be reimplemented because the request requires an extra parameter
         exchange_info = await self._api_get(
             path_url=self.trading_rules_request_path,
-            params={"instType": "SPOT"},
+            params={},
         )
         trading_rules_list = await self._format_trading_rules(exchange_info)
         self._trading_rules.clear()
@@ -267,18 +265,22 @@ class CryptomExchange(ExchangePyBase):
     async def _format_trading_rules(self, raw_trading_pair_info: List[Dict[str, Any]]) -> List[TradingRule]:
         trading_rules = []
 
-        for info in raw_trading_pair_info.get("data", []):
+        for info in raw_trading_pair_info.get("result", []):
             try:
                 if cryptom_utils.is_exchange_information_valid(exchange_info=info):
-                    trading_rules.append(
-                        TradingRule(
-                            trading_pair=await self.trading_pair_associated_to_exchange_symbol(symbol=info["instId"]),
-                            min_order_size=Decimal(info["minSz"]),
-                            min_price_increment=Decimal(info["tickSz"]),
-                            min_base_amount_increment=Decimal(info["lotSz"]),
+                    assetid=info["id"]
+                    trading_pair=await self.trading_pair_associated_to_exchange_symbol(symbol=str(assetid))
+                    quantityFilterMin=Decimal(info["quantityFilterMin"])
+                    priceFilterStepSize=Decimal(info["priceFilterStepSize"])
+                    quantityFilterStepSize=Decimal(info["quantityFilterStepSize"])
+                    rule= TradingRule(
+                            trading_pair=trading_pair,
+                            min_order_size=Decimal(quantityFilterMin),
+                            min_price_increment=Decimal(priceFilterStepSize),
+                            min_base_amount_increment=Decimal(quantityFilterStepSize),
                         )
-                    )
-            except Exception:
+                    trading_rules.append(rule)
+            except Exception as ex:
                 self.logger().exception(f"Error parsing the trading pair rule {info}. Skipping.")
         return trading_rules
 
