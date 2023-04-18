@@ -3,6 +3,7 @@ import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from hummingbot.connector.exchange.cryptom import cryptom_constants as CONSTANTS, cryptom_web_utils as web_utils
+from hummingbot.connector.test_support.network_mocking_assistant import NetworkMockingAssistant
 from hummingbot.core.data_type.common import TradeType
 from hummingbot.core.data_type.order_book_message import OrderBookMessage, OrderBookMessageType
 from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTrackerDataSource
@@ -144,68 +145,14 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
             message_queue.put_nowait(diff_message)
 
     async def _subscribe_channels(self, ws: WSAssistant):
-        try:
-            for trading_pair in self._trading_pairs:
-                symbol = await self._connector.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
-
-                payload = {
-                    "op": "subscribe",
-                    "args": [
-                        {
-                            "channel": "trades",
-                            "instId": symbol,
-                        }
-                    ]
-                }
-                subscribe_trade_request: WSJSONRequest = WSJSONRequest(payload=payload)
-
-                payload = {
-                    "op": "subscribe",
-                    "args": [
-                        {
-                            "channel": "books",
-                            "instId": symbol,
-                        }]
-                }
-                subscribe_orderbook_request: WSJSONRequest = WSJSONRequest(payload=payload)
-
-                async with self._api_factory.throttler.execute_task(limit_id=CONSTANTS.WS_SUBSCRIPTION_LIMIT_ID):
-                    await ws.send(subscribe_trade_request)
-                async with self._api_factory.throttler.execute_task(limit_id=CONSTANTS.WS_SUBSCRIPTION_LIMIT_ID):
-                    await ws.send(subscribe_orderbook_request)
-
-            self.logger().info("Subscribed to public order book and trade channels...")
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            self.logger().exception("Unexpected error occurred subscribing to order book trading and delta streams...")
-            raise
-
+        await asyncio.sleep(1)
     def _channel_originating_message(self, event_message: Dict[str, Any]) -> str:
-        channel = ""
-        if "data" in event_message:
-            event_channel = event_message["arg"]["channel"]
-            if event_channel == CONSTANTS.OKX_WS_PUBLIC_TRADES_CHANNEL:
-                channel = self._trade_messages_queue_key
-            elif event_channel == CONSTANTS.OKX_WS_PUBLIC_BOOKS_CHANNEL and event_message["action"] == "update":
-                channel = self._diff_messages_queue_key
-            elif event_channel == CONSTANTS.OKX_WS_PUBLIC_BOOKS_CHANNEL and event_message["action"] == "snapshot":
-                channel = self._snapshot_messages_queue_key
-
-        return channel
+        pass
 
     async def _process_websocket_messages(self, websocket_assistant: WSAssistant):
         while True:
-            try:
-                await super()._process_websocket_messages(websocket_assistant=websocket_assistant)
-            except asyncio.TimeoutError:
-                ping_request = WSPlainTextRequest(payload="ping")
-                await websocket_assistant.send(request=ping_request)
-
+            await asyncio.sleep(1)
     async def _connected_websocket_assistant(self) -> WSAssistant:
-        ws: WSAssistant = await self._api_factory.get_ws_assistant()
-        async with self._api_factory.throttler.execute_task(limit_id=CONSTANTS.WS_CONNECTION_LIMIT_ID):
-            await ws.connect(
-                ws_url=CONSTANTS.CRYPTOM_WS_URI_PUBLIC,
-                message_timeout=CONSTANTS.SECONDS_TO_WAIT_TO_RECEIVE_MESSAGE)
+        mocking_assistant = NetworkMockingAssistant()
+        ws: WSAssistant = mocking_assistant.create_websocket_mock()
         return ws

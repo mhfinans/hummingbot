@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from decimal import Decimal
 import json
@@ -25,8 +26,8 @@ class CryptomTestExample(ScriptStrategyBase):
     
     def __init__(self,connectors: Dict[str, ConnectorSetting]):
         super().__init__(connectors)
-        self.getParamsFromEnv()
-        self.initRedisClient()
+        #self.getParamsFromEnv()
+        #self.initRedisClient()
 
     
     def getParamsFromEnv(self):
@@ -60,12 +61,13 @@ class CryptomTestExample(ScriptStrategyBase):
     cancel_order=False
 
     def on_tick(self):
+        print("-------on_tick---------")
+        """
         if  self.create_order==False:
             #self.connectors["cryptom"]._place_order(1,"BTC-USDT",1.0,TradeType.BUY,OrderType.LIMIT,10000)
 
             self.order_id=self.connectors["cryptom"].buy("BTC-USDT",Decimal(0.002),OrderType.LIMIT,Decimal(30000.10))
             self.create_order=True
-
         if self.create_order==True and self.cancel_order==False:
             canceled_id=self.connectors["cryptom"].cancel("BTC-USDT",self.order_id)
             if (canceled_id==self.order_id):
@@ -75,6 +77,7 @@ class CryptomTestExample(ScriptStrategyBase):
 
 
             print("place order end --------------------")
+        """            
         """
         self.pop_config()
         logging.getLogger(__name__).debug("config {}".format(self.config))
