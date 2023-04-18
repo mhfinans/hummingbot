@@ -56,13 +56,24 @@ class CryptomTestExample(ScriptStrategyBase):
             logging.getLogger(__name__).error("Error pop task object to redis: {0}".format(e))
             return False        
 
-    ok=False
+    create_order=False
+    cancel_order=False
+
     def on_tick(self):
-        if  self.ok==False:
+        if  self.create_order==False:
             #self.connectors["cryptom"]._place_order(1,"BTC-USDT",1.0,TradeType.BUY,OrderType.LIMIT,10000)
 
-            self.connectors["cryptom"].buy("BTC-USDT",Decimal(0.002),OrderType.LIMIT,Decimal(30000.10))
-            self.ok=True
+            self.order_id=self.connectors["cryptom"].buy("BTC-USDT",Decimal(0.002),OrderType.LIMIT,Decimal(30000.10))
+            self.create_order=True
+
+        if self.create_order==True and self.cancel_order==False:
+            canceled_id=self.connectors["cryptom"].cancel("BTC-USDT",self.order_id)
+            if (canceled_id==self.order_id):
+                logging.getLogger(__name__).info("cancel order success")
+                self.cancel_order=True
+                
+
+
             print("place order end --------------------")
         """
         self.pop_config()

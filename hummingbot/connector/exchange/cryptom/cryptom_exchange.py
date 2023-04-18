@@ -21,6 +21,8 @@ from hummingbot.core.data_type.user_stream_tracker_data_source import UserStream
 from hummingbot.core.utils.estimate_fee import build_trade_fee
 from hummingbot.core.web_assistant.connections.data_types import RESTMethod
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
+import datetime
+
 
 if TYPE_CHECKING:
     from hummingbot.client.config.config_helpers import ClientConfigAdapter
@@ -187,19 +189,19 @@ class CryptomExchange(ExchangePyBase):
             raise IOError(f"Error submitting order {order_id}: {ex.args[0]}")
 
         data = exchange_order_id["result"]
-        return str(data["id"]), self.current_timestamp
+        return data["orderId"], self.current_timestamp
 
     async def _place_cancel(self, order_id: str, tracked_order: InFlightOrder):
+        if tracked_order.exchange_order_id is None:
+            raise ValueError(f"Cannot cancel order {order_id} - no exchange order ID.")
         """
         This implementation specific function is called by _cancel, and returns True if successful
         """
-        params = {
-            "clOrdId": order_id,
-            "instId": tracked_order.trading_pair
-        }
+        url=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH.format(order_id=tracked_order.exchange_order_id)
+        print(url)
         cancel_result = await self._api_post(
-            path_url=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH,
-            data=params,
+            path_url=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH.format(order_id=tracked_order.exchange_order_id),
+            data={},
             is_auth_required=True,
         )
         if cancel_result["data"][0]["sCode"] == "0":
@@ -291,22 +293,24 @@ class CryptomExchange(ExchangePyBase):
         pass
 
     async def _request_order_update(self, order: InFlightOrder) -> Dict[str, Any]:
+        orderId=await order.get_exchange_order_id()
+        
         return await self._api_request(
             method=RESTMethod.GET,
             path_url=CONSTANTS.CRYPTOM_ORDER_DETAILS_PATH,
             params={
-                "instId": await self.exchange_symbol_associated_to_pair(order.trading_pair),
-                "clOrdId": order.client_order_id},
+                    "$order_id":"eq@{}".format(orderId),
+                    },
             is_auth_required=True)
 
     async def _request_order_fills(self, order: InFlightOrder) -> Dict[str, Any]:
+        order_id="90_3_ETH-TRY_0_0.0077_2_1677766282_55"#TODO:AC await order.get_exchange_order_id()
         return await self._api_request(
             method=RESTMethod.GET,
             path_url=CONSTANTS.CRYPTOM_TRADE_FILLS_PATH,
             params={
-                "instType": "SPOT",
-                "instId": await self.exchange_symbol_associated_to_pair(order.trading_pair),
-                "ordId": await order.get_exchange_order_id()},
+                "$order_id": "eq@{}".format(order_id),
+                },
             is_auth_required=True)
 
     async def _all_trade_updates_for_order(self, order: InFlightOrder) -> List[TradeUpdate]:
@@ -315,44 +319,50 @@ class CryptomExchange(ExchangePyBase):
         if order.exchange_order_id is not None:
             try:
                 all_fills_response = await self._request_order_fills(order=order)
-                fills_data = all_fills_response["data"]
-
+                fills_data = all_fills_response["result"]
+                percent_token=await self.exchange_symbol_associated_to_pair(order.trading_pair)
                 for fill_data in fills_data:
                     fee = TradeFeeBase.new_spot_fee(
                         fee_schema=self.trade_fee_schema(),
                         trade_type=order.trade_type,
-                        percent_token=fill_data["feeCcy"],
-                        flat_fees=[TokenAmount(amount=Decimal(fill_data["fee"]), token=fill_data["feeCcy"])]
+                        percent_token=percent_token,
+                        flat_fees=[TokenAmount(amount=Decimal(fill_data["commission"]), token=percent_token)]
                     )
+                     
+                  
+                    timestamp=datetime.datetime.fromisoformat(fill_data["updatedAt"].replace("Z",""))
                     trade_update = TradeUpdate(
-                        trade_id=str(fill_data["tradeId"]),
+                        trade_id=str(fill_data["id"]),
                         client_order_id=order.client_order_id,
-                        exchange_order_id=str(fill_data["ordId"]),
+                        exchange_order_id=str(fill_data["orderId"]),
                         trading_pair=order.trading_pair,
                         fee=fee,
-                        fill_base_amount=Decimal(fill_data["fillSz"]),
-                        fill_quote_amount=Decimal(fill_data["fillSz"]) * Decimal(fill_data["fillPx"]),
-                        fill_price=Decimal(fill_data["fillPx"]),
-                        fill_timestamp=int(fill_data["ts"]) * 1e-3,
+                        fill_base_amount=Decimal(sum(Decimal(d['quantity']) for d in fill_data['done'] if d['side'] == 'buy')),
+                        fill_quote_amount=Decimal(sum(Decimal(d['quantity']) * Decimal(d['price']) for d in fill_data['done'] if d['side'] == 'sell')),
+                        fill_price=Decimal(fill_data["done"][0]["price"]),
+                        fill_timestamp=timestamp,
                     )
                     trade_updates.append(trade_update)
             except IOError as ex:
                 if not self._is_request_exception_related_to_time_synchronizer(request_exception=ex):
                     raise
+            except Exception as ex:
+                print(ex)
+                raise
         return trade_updates
 
     async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
         try:
             updated_order_data = await self._request_order_update(order=tracked_order)
 
-            order_data = updated_order_data["data"][0]
-            new_state = CONSTANTS.ORDER_STATE[order_data["state"]]
-
+            order_data = updated_order_data["result"][0]
+            new_state = CONSTANTS.ORDER_STATE[str(order_data["status"])]
+            timestamp=datetime.datetime.fromisoformat(order_data["updatedAt"].replace("Z",""))
             order_update = OrderUpdate(
                 client_order_id=tracked_order.client_order_id,
-                exchange_order_id=str(order_data["ordId"]),
+                exchange_order_id=str(order_data["orderId"]),
                 trading_pair=tracked_order.trading_pair,
-                update_timestamp=int(order_data["uTime"]) * 1e-3,
+                update_timestamp=timestamp,
                 new_state=new_state,
             )
 

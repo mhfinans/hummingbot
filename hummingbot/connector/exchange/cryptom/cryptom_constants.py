@@ -17,16 +17,20 @@ CRYPTOM_BASE_URL = ""
 
 CRYPTOM_SERVER_TIME_PATH = '/api/v1/public/time'
 CRYPTOM_INSTRUMENTS_PATH = 'http://localhost:9007/assets'
-CRYPTOM_TICKER_PATH = '/api/v5/market/ticker'
+CRYPTOM_TICKER_PATH = 'https://testnet.binance.vision/api/v3/ticker/24hr'
 CRYPTOM_ORDER_BOOK_PATH = 'http://localhost:9001/orders'
 
 # Auth required
 CRYPTOM_PLACE_ORDER_PATH = "http://localhost:9001/orders"
-CRYPTOM_ORDER_DETAILS_PATH = '/api/v5/trade/order'
-CRYPTOM_ORDER_CANCEL_PATH = '/api/v5/trade/cancel-order'
-CRYPTOM_BATCH_ORDER_CANCEL_PATH = '/api/v5/trade/cancel-batch-orders'
+CRYPTOM_ORDER_DETAILS_PATH = 'http://localhost:9001/orders'
+CRYPTOM_ORDER_CANCEL_PATH = 'http://localhost:9001/orders/{order_id}'
 CRYPTOM_BALANCE_PATH = 'http://localhost:9004/wallets?$user_id=eq@{user_id}'
-CRYPTOM_TRADE_FILLS_PATH = "http://localhost:9001/orders" #"/api/v5/trade/fills"
+CRYPTOM_TRADE_FILLS_PATH = "http://localhost:9002/trades"
+
+CRYPTOM_STATUS_ORDER_PROCESSING = 1
+CRYPTOM_STATUS_ORDER_DONE = 2
+CRYPTOM_STATUS_ORDER_PARTIAL = 3
+CRYPTOM_STATUS_ORDER_CANCEL = 4
 
 # WS
 CRYPTOM_WS_URI_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
@@ -73,7 +77,6 @@ RATE_LIMITS = [
     RateLimit(limit_id=CRYPTOM_PLACE_ORDER_PATH, limit=60, time_interval=2),
     RateLimit(limit_id=CRYPTOM_ORDER_DETAILS_PATH, limit=60, time_interval=2),
     RateLimit(limit_id=CRYPTOM_ORDER_CANCEL_PATH, limit=60, time_interval=2),
-    RateLimit(limit_id=CRYPTOM_BATCH_ORDER_CANCEL_PATH, limit=300, time_interval=2),
     RateLimit(limit_id=CRYPTOM_BALANCE_PATH, limit=10, time_interval=2),
     RateLimit(limit_id=CRYPTOM_TRADE_FILLS_PATH, limit=60, time_interval=2), 
 ]
