@@ -61,6 +61,7 @@ class CryptomTestExample(ScriptStrategyBase):
     cancel_order=False
 
     def on_tick(self):
+        pass
         print("-------on_tick---------")
         """
         if  self.create_order==False:

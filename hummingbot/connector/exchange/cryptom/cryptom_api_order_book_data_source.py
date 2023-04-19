@@ -67,11 +67,7 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
         :return: the response from the exchange (JSON dictionary)
         """
-        params = {
-            "$market":"eq@{}".format(trading_pair),
-            "$take":"1000",
-            "$sort":"[id@desc]"
-        }
+        params = {"$market":"eq@{}".format(trading_pair)}
 
         rest_assistant = await self._api_factory.get_rest_assistant()
         data = await rest_assistant.execute_request(

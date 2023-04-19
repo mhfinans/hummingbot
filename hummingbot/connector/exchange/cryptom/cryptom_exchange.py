@@ -1,3 +1,4 @@
+from ast import excepthandler
 import asyncio
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -218,15 +219,16 @@ class CryptomExchange(ExchangePyBase):
         return final_result
 
     async def _get_last_traded_price(self, trading_pair: str) -> float:
-        params = {"instId": await self.exchange_symbol_associated_to_pair(trading_pair=trading_pair)}
-
-        resp_json = await self._api_request(
-            path_url=CONSTANTS.CRYPTOM_TICKER_PATH,
-            params=params,
-        )
-
-        ticker_data, *_ = resp_json["data"]
-        return float(ticker_data["last"])
+        try:
+            exchange_symbol = trading_pair.replace("-", "")
+            params = {"symbol": exchange_symbol}
+            response = await self._api_get(
+                path_url=CONSTANTS.CRYPTOM_TICKER_PATH,
+                params=params)
+            price = float(response["lastPrice"])
+        except Exception as ex:
+            raise IOError(f"Error fetching last traded price for {trading_pair}: {excepthandler.args[0]}")
+        return price
 
     async def _update_balances(self):
         try:
