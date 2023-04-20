@@ -157,7 +157,7 @@ class CryptomExchange(ExchangePyBase):
     def _initialize_trading_pair_symbols_from_exchange_info(self, exchange_info: Dict[str, Any]):
         mapping = bidict()
         for symbol_data in exchange_info["result"]:
-            mapping[str(symbol_data["id"])] = symbol_data["name"]
+            mapping[symbol_data["name"]] = symbol_data["name"]
             
         self._set_trading_pair_symbol_map(mapping)
 
@@ -272,8 +272,7 @@ class CryptomExchange(ExchangePyBase):
         for info in raw_trading_pair_info.get("result", []):
             try:
                 if cryptom_utils.is_exchange_information_valid(exchange_info=info):
-                    assetid=info["id"]
-                    trading_pair=await self.trading_pair_associated_to_exchange_symbol(symbol=str(assetid))
+                    trading_pair=info["name"]
                     quantityFilterMin=Decimal(info["quantityFilterMin"])
                     priceFilterStepSize=Decimal(info["priceFilterStepSize"])
                     quantityFilterStepSize=Decimal(info["quantityFilterStepSize"])
