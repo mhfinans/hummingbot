@@ -1,95 +1,77 @@
-import asyncio
-from datetime import datetime
-from decimal import Decimal
-import json
 import logging
-import os
-from hummingbot.client.settings import ConnectorSetting
-from typing import Any, Dict, List, Set
-from hummingbot.core.data_type.common import OrderType, TradeType
+from decimal import Decimal
+from typing import List
 
+from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
+from hummingbot.core.data_type.order_candidate import OrderCandidate
+from hummingbot.core.event.events import OrderFilledEvent
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
-import redis
 
-class CryptomTestExample(ScriptStrategyBase):
+
+class SimplePMM(ScriptStrategyBase):
     """
-    CRYTOM TEST SCRIPT
+    BotCamp Cohort: Sept 2022
+    Design Template: https://hummingbot-foundation.notion.site/Simple-PMM-63cc765486dd42228d3da0b32537fc92
+    Video: -
+    Description:
+    The bot will place two orders around the price_source (mid price or last traded price) in a trading_pair on
+    exchange, with a distance defined by the ask_spread and bid_spread. Every order_refresh_time in seconds,
+    the bot will cancel and replace the orders.
     """
-    config={
-        "market": "cryptom",
-        "pair": "BTC-USDT"
-    }
-    markets = {config["market"]: {config["pair"]}}
+    bid_spread = 0.08
+    ask_spread = 0.08
+    order_refresh_time = 15
+    order_amount = 0.01
+    create_timestamp = 0
+    trading_pair = "ETH-USDT"
+    exchange = "cryptom"
+    # Here you can use for example the LastTrade price to use in your strategy
+    price_source = PriceType.MidPrice
 
-    count = 0
-    status={}
-    
-    def __init__(self,connectors: Dict[str, ConnectorSetting]):
-        super().__init__(connectors)
-        #self.getParamsFromEnv()
-        #self.initRedisClient()
-
-    
-    def getParamsFromEnv(self):
-        self.REDIS_URL=os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        self.TASK_ID=os.getenv("TASK_ID","task_id")
-
-    def initRedisClient(self):
-        self.redis_client = redis.Redis.from_url(self.REDIS_URL)
-        if self.redis_client is None:
-            logging.getLogger(__name__).error("Redis client is None")
-    
-    def push_status(self):
-        try:
-            self.redis_client.set(self.TASK_ID+"_status", json.dumps(self.status))
-        except Exception as e:
-            logging.getLogger(__name__).error("Error pushing task object to redis: {0}".format(e))
-            return False
-    
-    def pop_config(self):
-        try:
-            json_str=self.redis_client.get(self.TASK_ID+"_config").decode("utf-8")
-            if json is not None:
-                self.config=json.loads(json_str)
-                logging.getLogger(__name__).info("config: {0}".format(self.config))
-           
-        except Exception as e:
-            logging.getLogger(__name__).error("Error pop task object to redis: {0}".format(e))
-            return False        
-
-    create_order=False
-    cancel_order=False
+    markets = {exchange: {trading_pair}}
 
     def on_tick(self):
-        pass
-        print("-------on_tick---------")
-        """
-        if  self.create_order==False:
-            #self.connectors["cryptom"]._place_order(1,"BTC-USDT",1.0,TradeType.BUY,OrderType.LIMIT,10000)
+        if self.create_timestamp <= self.current_timestamp:
+            self.cancel_all_orders()
+            proposal: List[OrderCandidate] = self.create_proposal()
+            proposal_adjusted: List[OrderCandidate] = self.adjust_proposal_to_budget(proposal)
+            self.place_orders(proposal_adjusted)
+            self.create_timestamp = self.order_refresh_time + self.current_timestamp
 
-            self.order_id=self.connectors["cryptom"].buy("BTC-USDT",Decimal(0.002),OrderType.LIMIT,Decimal(30000.10))
-            self.create_order=True
-        if self.create_order==True and self.cancel_order==False:
-            canceled_id=self.connectors["cryptom"].cancel("BTC-USDT",self.order_id)
-            if (canceled_id==self.order_id):
-                logging.getLogger(__name__).info("cancel order success")
-                self.cancel_order=True
-                
+    def create_proposal(self) -> List[OrderCandidate]:
+        ref_price = self.connectors[self.exchange].get_price_by_type(self.trading_pair, self.price_source)
+        buy_price = ref_price * Decimal(1 - self.bid_spread)
+        sell_price = ref_price * Decimal(1 + self.ask_spread)
 
+        buy_order = OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
+                                   order_side=TradeType.BUY, amount=Decimal(self.order_amount), price=buy_price)
 
-            print("place order end --------------------")
-        """            
-        """
-        self.pop_config()
-        logging.getLogger(__name__).debug("config {}".format(self.config))
-        self.logger().info("CRYTPOM SCRIPT TEST IS OK")
-        print("test {}",str(self.count))
-        self.count += 1
-        self.status["count"]=self.count
-        self.status["time"]=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.status["config"]=self.config
-        
+        sell_order = OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
+                                    order_side=TradeType.SELL, amount=Decimal(self.order_amount), price=sell_price)
 
-        logging.getLogger(__name__).debug("status {}".format(self.status))
-        self.push_status()
-        """
+        return [buy_order, sell_order]
+
+    def adjust_proposal_to_budget(self, proposal: List[OrderCandidate]) -> List[OrderCandidate]:
+        proposal_adjusted = self.connectors[self.exchange].budget_checker.adjust_candidates(proposal, all_or_none=True)
+        return proposal_adjusted
+
+    def place_orders(self, proposal: List[OrderCandidate]) -> None:
+        for order in proposal:
+            self.place_order(connector_name=self.exchange, order=order)
+
+    def place_order(self, connector_name: str, order: OrderCandidate):
+        if order.order_side == TradeType.SELL:
+            self.sell(connector_name=connector_name, trading_pair=order.trading_pair, amount=order.amount,
+                      order_type=order.order_type, price=order.price)
+        elif order.order_side == TradeType.BUY:
+            self.buy(connector_name=connector_name, trading_pair=order.trading_pair, amount=order.amount,
+                     order_type=order.order_type, price=order.price)
+
+    def cancel_all_orders(self):
+        for order in self.get_active_orders(connector_name=self.exchange):
+            self.cancel(self.exchange, order.trading_pair, order.client_order_id)
+
+    def did_fill_order(self, event: OrderFilledEvent):
+        msg = (f"{event.trade_type.name} {round(event.amount, 2)} {event.trading_pair} {self.exchange} at {round(event.price, 2)}")
+        self.log_with_clock(logging.INFO, msg)
+        self.notify_hb_app_with_timestamp(msg)

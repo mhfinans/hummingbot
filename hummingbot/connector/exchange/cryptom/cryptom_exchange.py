@@ -198,25 +198,25 @@ class CryptomExchange(ExchangePyBase):
         """
         This implementation specific function is called by _cancel, and returns True if successful
         """
-        url=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH.format(order_id=tracked_order.exchange_order_id)
-        print(url)
-        cancel_result = await self._api_post(
-            path_url=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH.format(order_id=tracked_order.exchange_order_id),
-            data={},
-            is_auth_required=True,
-        )
-        if cancel_result["data"][0]["sCode"] == "0":
-            final_result = True
-        elif cancel_result["data"][0]["sCode"] == "51400":
-            # Cancelation failed because the order does not exist
-            final_result = True
-        elif cancel_result["data"][0]["sCode"] == "51401":
-            # Cancelation failed because order has been cancelled
-            final_result = True
-        else:
+        url_2=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH+"/"+str(tracked_order.exchange_order_id)
+        print(url_2)
+        try:
+            cancel_result =  await self._api_request(
+                path_url=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH,
+                overwrite_url=url_2,
+                method=RESTMethod.DELETE,
+                is_auth_required=True,
+                data={},
+                params={},
+            )
+        except Exception as ex:
+            print(ex)
+            raise IOError(f"Error submitting order {order_id}: {ex.args[0]}")
+
+        if cancel_result["result"]["orderId"]!=tracked_order.exchange_order_id:
             raise IOError(f"Error cancelling order {order_id}: {cancel_result}")
 
-        return final_result
+        return True
 
     async def _get_last_traded_price(self, trading_pair: str) -> float:
         try:
@@ -342,7 +342,7 @@ class CryptomExchange(ExchangePyBase):
                         fill_base_amount=Decimal(sum(Decimal(d['quantity']) for d in fill_data['done'] if d['side'] == 'buy')),
                         fill_quote_amount=Decimal(sum(Decimal(d['quantity']) * Decimal(d['price']) for d in fill_data['done'] if d['side'] == 'sell')),
                         fill_price=Decimal(fill_data["done"][0]["price"]),
-                        fill_timestamp=timestamp,
+                        fill_timestamp=timestamp.timestamp(),
                     )
                     trade_updates.append(trade_update)
             except IOError as ex:

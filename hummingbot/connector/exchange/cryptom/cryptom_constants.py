@@ -23,7 +23,7 @@ CRYPTOM_ORDER_BOOK_PATH = 'http://localhost:9001/orders'
 # Auth required
 CRYPTOM_PLACE_ORDER_PATH = "http://localhost:9001/orders"
 CRYPTOM_ORDER_DETAILS_PATH = 'http://localhost:9001/orders'
-CRYPTOM_ORDER_CANCEL_PATH = 'http://localhost:9001/orders/{order_id}'
+CRYPTOM_ORDER_CANCEL_PATH = 'http://localhost:9001/orders'
 CRYPTOM_BALANCE_PATH = 'http://localhost:9004/wallets?$user_id=eq@{user_id}'
 CRYPTOM_TRADE_FILLS_PATH = "http://localhost:9002/trades"
 
