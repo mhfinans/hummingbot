@@ -27,6 +27,7 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
         super().__init__(trading_pairs)
         self._connector = connector
         self._api_factory = api_factory
+        self.FULL_ORDER_BOOK_RESET_DELTA_SECONDS=10
 
     async def get_last_traded_prices(self,
                                      trading_pairs: List[str],
@@ -67,7 +68,7 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
         :return: the response from the exchange (JSON dictionary)
         """
-        params = {"$market":"eq@{}".format(trading_pair)}
+        params = {"$market":"eq@{}".format(trading_pair),"$status":"eq@1"}
 
         rest_assistant = await self._api_factory.get_rest_assistant()
         data = await rest_assistant.execute_request(

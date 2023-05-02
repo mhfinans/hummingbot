@@ -241,7 +241,7 @@ class BinanceExchange(ExchangePyBase):
                 filters = rule.get("filters")
                 price_filter = [f for f in filters if f.get("filterType") == "PRICE_FILTER"][0]
                 lot_size_filter = [f for f in filters if f.get("filterType") == "LOT_SIZE"][0]
-                min_notional_filter = [f for f in filters if f.get("filterType") == "MIN_NOTIONAL"][0]
+                min_notional_filter = [f for f in filters if f.get("filterType") == "NOTIONAL"][0]
 
                 min_order_size = Decimal(lot_size_filter.get("minQty"))
                 tick_size = price_filter.get("tickSize")
@@ -255,7 +255,7 @@ class BinanceExchange(ExchangePyBase):
                                 min_base_amount_increment=Decimal(step_size),
                                 min_notional_size=Decimal(min_notional)))
 
-            except Exception:
+            except Exception as ex:
                 self.logger().exception(f"Error parsing the trading pair rule {rule}. Skipping.")
         return retval
 

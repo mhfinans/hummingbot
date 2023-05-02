@@ -152,8 +152,7 @@ class CryptomExchange(ExchangePyBase):
             )
             self._initialize_trading_pair_symbols_from_exchange_info(exchange_info=exchange_info)
         except Exception as e:
-            print(e)
-            self.logger().exception("There was an error requesting exchange info.")
+            self.logger().exception("There was an error requesting exchange info.", exc_info=e)
     def _initialize_trading_pair_symbols_from_exchange_info(self, exchange_info: Dict[str, Any]):
         mapping = bidict()
         for symbol_data in exchange_info["result"]:
@@ -186,7 +185,6 @@ class CryptomExchange(ExchangePyBase):
                 is_auth_required=True,
             )
         except Exception as ex:
-            print(ex)
             raise IOError(f"Error submitting order {order_id}: {ex.args[0]}")
 
         data = exchange_order_id["result"]
@@ -198,19 +196,16 @@ class CryptomExchange(ExchangePyBase):
         """
         This implementation specific function is called by _cancel, and returns True if successful
         """
-        url_2=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH+"/"+str(tracked_order.exchange_order_id)
-        print(url_2)
         try:
             cancel_result =  await self._api_request(
                 path_url=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH,
-                overwrite_url=url_2,
+                overwrite_url=CONSTANTS.CRYPTOM_ORDER_CANCEL_PATH+"/"+str(tracked_order.exchange_order_id),
                 method=RESTMethod.DELETE,
                 is_auth_required=True,
                 data={},
                 params={},
             )
         except Exception as ex:
-            print(ex)
             raise IOError(f"Error submitting order {order_id}: {ex.args[0]}")
 
         if cancel_result["result"]["orderId"]!=tracked_order.exchange_order_id:
@@ -237,7 +232,6 @@ class CryptomExchange(ExchangePyBase):
                 method=RESTMethod.GET,
                 is_auth_required=True)
         except Exception as ex:            
-            print(ex)
             raise IOError(f"Error fetching balances: {ex.args[0]}")
 
         balances = msg['result'][0]['assets']
@@ -305,7 +299,7 @@ class CryptomExchange(ExchangePyBase):
             is_auth_required=True)
 
     async def _request_order_fills(self, order: InFlightOrder) -> Dict[str, Any]:
-        order_id="90_3_ETH-TRY_0_0.0077_2_1677766282_55"#TODO:AC await order.get_exchange_order_id()
+        order_id=await order.get_exchange_order_id()
         return await self._api_request(
             method=RESTMethod.GET,
             path_url=CONSTANTS.CRYPTOM_TRADE_FILLS_PATH,
@@ -347,9 +341,7 @@ class CryptomExchange(ExchangePyBase):
             except IOError as ex:
                 if not self._is_request_exception_related_to_time_synchronizer(request_exception=ex):
                     raise
-            except Exception as ex:
-                print(ex)
-                raise
+
         return trade_updates
 
     async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
