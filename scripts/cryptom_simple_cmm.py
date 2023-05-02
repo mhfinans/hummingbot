@@ -42,7 +42,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
             self.initRedisClient()
             json_str=self.redis_client.get(self.TASK_ID+"_config")
             if json_str is None:
-                self.logger().info("config is empty")
+                #self.logger().info("config is empty")
                 self.status["error"]="config is empty"
                 return False
             else:

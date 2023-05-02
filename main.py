@@ -28,7 +28,8 @@ class HummingbotNoTTY(PubSub):
         self.mainApp = mainApp
 
     async def run(self):
-        self.startStrategy("cryptom_test.py")
+        scriptname=os.getenv("SCRIPT")
+        self.startStrategy(scriptname)
         while True:
             await asyncio.sleep(10)
     def startStrategy(self, script_name:str):
