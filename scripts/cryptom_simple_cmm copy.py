@@ -178,12 +178,14 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         diff=0
         min_bid= None
         for bid in bids:
-            if (ask.price-(bid.price))>diff:
-                diff=ask.price-(bid.price)
+            spread=self.get_right_fee(bid)
+            if (ask.price-(bid.price+spread))>diff:
+                diff=ask.price-(bid.price+spread)
                 min_bid=bid
             
         if min_bid is None:
             return None
+        spread=self.get_right_fee(min_bid)
         
         return min_bid
     

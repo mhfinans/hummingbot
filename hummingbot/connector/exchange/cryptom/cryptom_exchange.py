@@ -315,7 +315,8 @@ class CryptomExchange(ExchangePyBase):
             try:
                 all_fills_response = await self._request_order_fills(order=order)
                 fills_data = all_fills_response["result"]
-                percent_token=await self.exchange_symbol_associated_to_pair(order.trading_pair)
+                percent_token=(await self.exchange_symbol_associated_to_pair(order.trading_pair))
+                percent_token=percent_token.split("-")[0]
                 for fill_data in fills_data:
                     fee = TradeFeeBase.new_spot_fee(
                         fee_schema=self.trade_fee_schema(),
