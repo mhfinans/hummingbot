@@ -1,17 +1,35 @@
 import json
 import logging
-from decimal import Decimal
 import os
+import time
+from decimal import Decimal
 from typing import List
-from hummingbot.client.settings import ConnectorSetting
-
-from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
-from hummingbot.core.data_type.order_candidate import OrderCandidate
-from hummingbot.core.event.events import BuyOrderCompletedEvent, BuyOrderCreatedEvent, FundingPaymentCompletedEvent, MarketOrderFailureEvent, OrderCancelledEvent, OrderExpiredEvent, OrderFilledEvent, PositionModeChangeEvent, RangePositionClosedEvent, RangePositionFeeCollectedEvent, RangePositionLiquidityAddedEvent, RangePositionLiquidityRemovedEvent, RangePositionUpdateEvent, RangePositionUpdateFailureEvent, SellOrderCompletedEvent, SellOrderCreatedEvent
-from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 
 import redis
-import time
+
+from hummingbot.client.settings import ConnectorSetting
+from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
+from hummingbot.core.data_type.order_candidate import OrderCandidate
+from hummingbot.core.event.events import (
+    BuyOrderCompletedEvent,
+    BuyOrderCreatedEvent,
+    FundingPaymentCompletedEvent,
+    MarketOrderFailureEvent,
+    OrderCancelledEvent,
+    OrderExpiredEvent,
+    OrderFilledEvent,
+    PositionModeChangeEvent,
+    RangePositionClosedEvent,
+    RangePositionFeeCollectedEvent,
+    RangePositionLiquidityAddedEvent,
+    RangePositionLiquidityRemovedEvent,
+    RangePositionUpdateEvent,
+    RangePositionUpdateFailureEvent,
+    SellOrderCompletedEvent,
+    SellOrderCreatedEvent,
+)
+from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
+
 
 class CryptomSimpleCrossMM(ScriptStrategyBase):
     redis_client = None
@@ -74,6 +92,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         else:
             return False
     def on_tick(self):
+        logging.getLogger(__name__).info("CMM: Tick")        
         if self.updateParams():
             logging.getLogger(__name__).info("update params success")
             return
@@ -90,12 +109,12 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
 
             self.cancel_all_orders()
             left_asks=self.get_left_asks()
-#            print(left_asks)
+            logging.getLogger(__name__).info("CMM: checking left_asks",left_asks)
             for ask in left_asks:
                 bid=self.get_right_best_bid(ask)
-                logging.getLogger(__name__).info("ask",ask)
-                logging.getLogger(__name__).info("bid",bid)
+                logging.getLogger(__name__).info("CMM:  checking right best ask {} bid {}",ask,bid)
                 if ask and bid:
+                    logging.getLogger(__name__).info("CMM: creating orders",ask,bid)
                     self.place_order(connector_name=self.left_market, order=self.create_proposal(ask))
                     self.place_order(connector_name=self.right_market, order=self.create_opposite_order(bid))
                     self.wait_tick=60
