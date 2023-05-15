@@ -18,15 +18,15 @@ CRYPTOM_BASE_URL = ""
 CRYPTOM_SERVER_TIME_PATH = '/api/v1/public/time'
 CRYPTOM_TICKER_PATH = 'https://testnet.binance.vision/api/v3/ticker/24hr'
 
-CRYPTOM_INSTRUMENTS_PATH = 'http://assets:9007/assets'
-CRYPTOM_ORDER_BOOK_PATH = 'http://orders:9001/orders'
+CRYPTOM_INSTRUMENTS_PATH = 'http://assets.cryptom-staging:9007/assets'
+CRYPTOM_ORDER_BOOK_PATH = 'http://orders.cryptom-staging:9001/orders'
 
 
-CRYPTOM_PLACE_ORDER_PATH = "http://orders:9001/orders"
-CRYPTOM_ORDER_DETAILS_PATH = 'http://orders:9001/orders'
-CRYPTOM_ORDER_CANCEL_PATH = 'http://orders:9001/orders'
-CRYPTOM_BALANCE_PATH = 'http://wallets:9004/wallets?$user_id=eq@{user_id}'
-CRYPTOM_TRADE_FILLS_PATH = "http://trades:9002/trades"
+CRYPTOM_PLACE_ORDER_PATH = "http://orders.cryptom-staging:9001/orders"
+CRYPTOM_ORDER_DETAILS_PATH = 'http://orders.cryptom-staging:9001/orders'
+CRYPTOM_ORDER_CANCEL_PATH = 'http://orders.cryptom-staging:9001/orders'
+CRYPTOM_BALANCE_PATH = 'http://wallets.cryptom-staging:9004/wallets?$user_id=eq@{user_id}'
+CRYPTOM_TRADE_FILLS_PATH = "http://trades.cryptom-staging:9002/trades"
 
 
 CRYPTOM_STATUS_ORDER_PROCESSING = 1
