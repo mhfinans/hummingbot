@@ -37,7 +37,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
     right_market=os.getenv("RIGHT_MARKET")
     left_market=os.getenv("LEFT_MARKET")
     markets = {left_market: {trading_pair},right_market: {trading_pair}}
-    TASK_ID=os.getenv("TASK_ID","task_id")
+    TASK_ID=os.getenv("TASK_ID","")
     config={}
     status={}
     wait_tick=0
@@ -60,20 +60,20 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
             self.initRedisClient()
             json_str=self.redis_client.get(self.TASK_ID+"_config")
             if json_str is None:
-                #self.logger().info("config is empty")
+                self.logger().info("config is empty")
                 #self.status["error"]="config is empty"
                 return False
             else:
                 json_str=json_str.decode("utf-8")
+                
             
-            if json is not None:
-                config=json.loads(json_str)
-                if self.check_config_and_update(config):
-                    self.config=config
-                    logging.getLogger(__name__).info("config: {0}".format(self.config))
-                    return True
-                else:
-                    return False
+            config=json.loads(json_str)
+            if self.check_config_and_update(config):
+                self.config=config
+                logging.getLogger(__name__).info("config: {0}".format(self.config))
+                return True
+            else:
+                return False
                 
            
         except Exception as e:
@@ -81,6 +81,10 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
             return False        
         
     def check_config_and_update(self,new):
+        if self.config is None:
+            return True
+        if self.config.get("version","") !=new.get("version",""):
+            return True
         return False
   
             
