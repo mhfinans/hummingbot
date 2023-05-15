@@ -61,7 +61,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
             json_str=self.redis_client.get(self.TASK_ID+"_config")
             if json_str is None:
                 #self.logger().info("config is empty")
-                self.status["error"]="config is empty"
+                #self.status["error"]="config is empty"
                 return False
             else:
                 json_str=json_str.decode("utf-8")
@@ -126,6 +126,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         self.status["left_active_orders"]=self.left_active_orders()
         self.status["right_active_orders"]=self.right_active_orders()
         self.status["binance_mid_price"]=float(binanceprice)
+        self.status["config"]=self.config
 
         self.update_status()
     
