@@ -92,7 +92,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         else:
             return False
     def on_tick(self):
-        logging.getLogger(__name__).info("CMM: Tick")        
+        #logging.getLogger(__name__).info("CMM: Tick")        
         if self.updateParams():
             logging.getLogger(__name__).info("update params success")
             return
