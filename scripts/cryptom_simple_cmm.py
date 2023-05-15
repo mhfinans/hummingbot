@@ -119,8 +119,8 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
                 logging.getLogger(__name__).info("CMM:  checking right best ask {} bid {}",ask,bid)
                 if ask and bid:
                     logging.getLogger(__name__).info("CMM: creating orders",ask,bid)
-                    self.place_order(connector_name=self.left_market, order=self.create_proposal(ask))
-                    self.place_order(connector_name=self.right_market, order=self.create_opposite_order(bid))
+                    self.place_order(connector_name=self.left_market, order=self.create_proposal(ask,bid))
+                    self.place_order(connector_name=self.right_market, order=self.create_opposite_order(bid,ask))
                     self.wait_tick=60
                     break
         except Exception as e:
@@ -142,15 +142,15 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         return count
         
         
-    def create_opposite_order(self,order):
-        logging.getLogger(__name__).info("create_opposite_order",order)
+    def create_opposite_order(self,bid_order,ask_order):
+        logging.getLogger(__name__).info("create_opposite_order",bid_order,ask_order),
         return OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                                        order_side=TradeType.BUY, amount=Decimal(order.amount), price=Decimal(order.price))
+                                        order_side=TradeType.BUY, amount=Decimal(ask_order.amount), price=Decimal(bid_order.price))
         
-    def create_proposal(self,order):
-        logging.getLogger(__name__).info("create proposal",order)
+    def create_proposal(self,ask_order,bid_order):
+        logging.getLogger(__name__).info("create proposal",ask_order,bid_order),
         return OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                                        order_side=TradeType.SELL, amount=Decimal(order.amount), price=Decimal(order.price))
+                                        order_side=TradeType.SELL, amount=Decimal(ask_order.amount), price=Decimal(ask_order.price))
 
     def get_right_fee(self,order):
         base_currency = self.trading_pair.split("-")[0]
@@ -183,7 +183,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         diff=0
         min_bid= None
         for bid in bids:
-            if (ask.price-(bid.price))>diff:
+            if (ask.price-(bid.price))>diff and ask.amount<=bid.amount:
                 diff=ask.price-(bid.price)
                 min_bid=bid
             
