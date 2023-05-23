@@ -1,16 +1,21 @@
 import asyncio
+import datetime
+from decimal import Decimal
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from hummingbot.connector.exchange.cryptom import cryptom_constants as CONSTANTS, cryptom_web_utils as web_utils
 from hummingbot.connector.test_support.network_mocking_assistant import NetworkMockingAssistant
-from hummingbot.core.data_type.common import TradeType
+from hummingbot.connector.utils import get_new_client_order_id
+from hummingbot.core.data_type.common import OrderType, PositionAction, PositionSide, TradeType
+from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderState
 from hummingbot.core.data_type.order_book_message import OrderBookMessage, OrderBookMessageType
 from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTrackerDataSource
 from hummingbot.core.web_assistant.connections.data_types import RESTMethod, WSJSONRequest, WSPlainTextRequest
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
 from hummingbot.core.web_assistant.ws_assistant import WSAssistant
 from hummingbot.logger import HummingbotLogger
+from hummingbot.model.order_status import OrderStatus
 
 #if TYPE_CHECKING:
 #    from hummingbot.connector.exchange.cryptom.cryptom_exchange import CryptomExchange
@@ -28,6 +33,7 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
         self._connector = connector
         self._api_factory = api_factory
         self.FULL_ORDER_BOOK_RESET_DELTA_SECONDS=10
+        self.KEEP_ORDER_DATA=True
 
     async def get_last_traded_prices(self,
                                      trading_pairs: List[str],
@@ -77,6 +83,31 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
             method=RESTMethod.GET,
             throttler_limit_id=CONSTANTS.CRYPTOM_ORDER_BOOK_PATH,
         )
+        if self.KEEP_ORDER_DATA:
+            self.AllMarketOrders=[]
+            try:
+                for order in data["result"]:
+                    new_order_id = get_new_client_order_id(
+                            is_buy=order["side"] == 1 and True or False,
+                            trading_pair=trading_pair,
+                        )
+                    self.AllMarketOrders.append(InFlightOrder(
+                        client_order_id=new_order_id,
+                        trading_pair=trading_pair,
+                        order_type=order['type']==1 and OrderType.LIMIT or OrderType.MARKET,
+                        trade_type=order['side']==1 and TradeType.BUY or TradeType.SELL,
+                        price=Decimal(order["price"]),
+                        amount=Decimal(order["quantity"]),
+                        exchange_order_id=str(order["orderId"]),
+                        creation_timestamp=datetime.datetime.fromisoformat(order["createdAt"].replace("Z","")),
+                        initial_state=OrderState.OPEN,
+                        position=PositionAction.OPEN,
+                        ))
+                    
+            except Exception as ex:            
+                self.logger().error(f"Error parsing order book snapshot message: {ex}", exc_info=True)
+        
+
 
         return data
 

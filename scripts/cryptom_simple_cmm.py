@@ -40,7 +40,12 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
     TASK_ID=os.getenv("TASK_ID","")
     config={}
     status={}
-    wait_tick=0
+    order_timeout_second=10 
+    process_interval=1
+    
+    forwardInFlights={}
+    oppositeInFlights={}
+    doneInFlights={}
         
 
     def initRedisClient(self):
@@ -95,63 +100,222 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
             return True
         else:
             return False
+        
+
     def on_tick(self):
+        if int(time.time()) % self.process_interval>0:
+            return
+
         #logging.getLogger(__name__).info("CMM: Tick")        
         if self.updateParams():
             logging.getLogger(__name__).info("update params success")
             return
         
 
-        binanceprice=self.connectors[self.right_market].get_mid_price(self.trading_pair)
+        binancemidprice=self.connectors[self.right_market].get_mid_price(self.trading_pair)
+        print("binance mid price: {}",binancemidprice)
+        cryptommidprice=self.connectors[self.left_market].get_mid_price(self.trading_pair)
         try:
-            if self.wait_tick>0:
-                if self.left_active_orders()==0 and self.right_active_orders()==0:
-                    self.wait_tick=0
-                    return
-                self.wait_tick-=1
-                return
+            newOrders=self.newOrdersFromLeft()
+            bestRightOrder=None
+            for newOrder in newOrders:
+                if newOrder.order_type==OrderType.LIMIT:
+                    bestRightOrder=self.get_right_best_order(newOrder)
+                    if bestRightOrder is None:
+                        continue
+                    
+                    self.createLimitForwardOrder(newOrder)
+                
+                elif newOrder.order_type==OrderType.MARKET:
+                    self.createMarketForwardOrder(newOrder)
 
-            self.cancel_all_orders()
-            left_asks=self.get_left_asks()
-            logging.getLogger(__name__).info("CMM: checking left_asks",left_asks)
-            for ask in left_asks:
-                bid=self.get_right_best_bid(ask)
-                logging.getLogger(__name__).info("CMM:  checking right best ask {} bid {}",ask,bid)
-                if ask and bid:
-                    logging.getLogger(__name__).info("CMM: creating orders",ask,bid)
-                    self.place_order(connector_name=self.left_market, order=self.create_proposal(ask,bid))
-                    self.place_order(connector_name=self.right_market, order=self.create_opposite_order(bid,ask))
-                    self.wait_tick=60
-                    break
+
         except Exception as e:
             print(e)
 
         self.status["time"]=time.time()
-        self.status["left_active_orders"]=self.left_active_orders()
-        self.status["right_active_orders"]=self.right_active_orders()
-        self.status["binance_mid_price"]=float(binanceprice)
+        self.status["left_bot_orders_count"]=len(self.left_bot_orders())
+        self.status["right_bot_orders_count"]=len(self.right_bot_orders())
+        self.status["cryptom_mid_price"]=float(cryptommidprice)
+        self.status["binance_mid_price"]=float(binancemidprice)
         self.status["config"]=self.config
 
         self.update_status()
     
-    def left_active_orders(self):
-        count=len(self.get_active_orders(connector_name=self.left_market))
-        return count
-    def right_active_orders(self):
-        count=len(self.get_active_orders(connector_name=self.right_market))
-        return count
-        
-        
-    def create_opposite_order(self,bid_order,ask_order):
-        logging.getLogger(__name__).info("create_opposite_order",bid_order,ask_order),
-        return OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                                        order_side=TradeType.BUY, amount=Decimal(ask_order.amount), price=Decimal(bid_order.price))
-        
-    def create_proposal(self,ask_order,bid_order):
-        logging.getLogger(__name__).info("create proposal",ask_order,bid_order),
-        return OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
-                                        order_side=TradeType.SELL, amount=Decimal(ask_order.amount), price=Decimal(ask_order.price))
+    def isAsk(self,order):
+        return order.trade_type==TradeType.SELL
+        #else Bid
+    
+    
+    def createLimitForwardOrder(self,source_order):
+        order_client_id=self.place_order(connector_name=self.right_market, order=self.create_order(source_order.amount,source_order.price,OrderType.LIMIT,TradeType.SELL if self.isAsk(source_order) else TradeType.BUY))
+        self.forwardInFlights[order_client_id]=source_order
+    
+    def createMarketForwardOrder(self,source_order):
+        right_mid_price=self.connectors[self.right_market].get_mid_price(self.trading_pair)
+        order_client_id=self.place_order(connector_name=self.right_market, order=self.create_order(source_order.amount,right_mid_price,OrderType.MARKET,TradeType.SELL if self.isAsk(source_order) else TradeType.BUY))
+        self.forwardInFlights[order_client_id]=source_order
+    
+    def createOppositeOrder(self,source_order):
+        order_client_id=self.place_order(connector_name=self.left_market, order=self.create_order(source_order.amount,source_order.price,source_order.order_type,TradeType.BUY if self.isAsk(source_order) else TradeType.SELL))
+        self.oppositeInFlights[order_client_id]=source_order
+    
 
+   
+    def  newOrdersFromLeft(self):
+        result=[]
+        all_left_orders=self.get_left_market_orders()
+        for i_source_order in all_left_orders:
+            doneOrderTime= self.doneInFlights.get(i_source_order.exchange_order_id,None)
+            add=True
+            if doneOrderTime is not None:
+                if time.time()-doneOrderTime<60*10:
+                    continue
+                else:
+                    del self.doneInFlights[i_source_order.exchange_order_id]
+                
+            for order_id,f_source_order in self.forwardInFlights.items():
+                if i_source_order.exchange_order_id==f_source_order.exchange_order_id:
+                    add=False
+                    break
+            for order_id,o_source_order in self.oppositeInFlights.items():
+                if i_source_order.exchange_order_id==o_source_order.exchange_order_id:
+                    add=False
+                    break
+            if add:
+                result.append(i_source_order)
+        logging.getLogger(__name__).info("new left orders: {}/{}".format(len(result),len(all_left_orders)))
+        return result
+         
+    def left_bot_orders(self):
+        return self.get_active_orders(connector_name=self.left_market)
+
+    def right_bot_orders(self):
+        return self.get_active_orders(connector_name=self.right_market)
+        
+        
+    def create_order(self,amount,price,order_type,order_side):
+        logging.getLogger(__name__).info("create_limit_order price:{} amount:{} order_side:{}".format(amount,price,order_side)),
+        return OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=order_type,
+                                        order_side=order_side, amount=Decimal(amount), price=Decimal(price))
+        
+   
+
+    def get_right_order_book(self):
+        return self.connectors[self.right_market].get_order_book(self.trading_pair)
+
+    def get_left_market_orders(self):
+        return self.connectors[self.left_market].order_book_tracker.data_source.AllMarketOrders
+
+    
+    
+    
+    def get_right_best_order(self,source_order):
+        if self.isAsk(source_order):
+            return self.get_right_best_bid(source_order.price,source_order.amount)
+        else:
+            return self.get_right_best_ask(source_order.price,source_order.amount)
+    
+    def get_right_best_bid(self,ref_price,ref_amount):
+        bids=self.get_right_order_book().bid_entries()
+        diff=0
+        max_bid= None
+        for bid in bids:
+            if (bid.price-ref_price)>diff and ref_amount<=bid.amount:
+                diff=ref_price-bid.price
+                max_bid=bid
+            
+        return max_bid
+        
+    def get_right_best_ask(self,ref_price,ref_amount):
+        asks=self.get_right_order_book().ask_entries()
+        diff=0
+        min_ask= None
+        for ask in asks:
+            if (ref_price-Decimal(ask.price))>diff and ref_amount<=Decimal(ask.amount):
+                diff=ref_price-Decimal(ask.price)
+                min_ask=ask
+            
+        return min_ask
+
+    def place_order(self, connector_name: str, order: OrderCandidate):
+        if order.order_side == TradeType.SELL:
+            return self.sell(connector_name=connector_name, trading_pair=order.trading_pair, amount=order.amount,
+                      order_type=order.order_type, price=order.price)
+        elif order.order_side == TradeType.BUY:
+            return self.buy(connector_name=connector_name, trading_pair=order.trading_pair, amount=order.amount,
+                     order_type=order.order_type, price=order.price)
+    
+    def cancel_all_orders(self):
+        for order in self.get_active_orders(connector_name=self.left_market):
+            self.cancel(self.left_market, order.trading_pair, order.client_order_id)
+        for order in self.get_active_orders(connector_name=self.right_market):
+            self.cancel(self.right_market, order.trading_pair, order.client_order_id)
+    
+            
+    def did_fill_order(self, order_filled_event: OrderFilledEvent):
+        print("fill_order price:{} ",order_filled_event)
+        
+        source_order=self.forwardInFlights.get(order_filled_event.order_id,None)
+        if source_order is not None:
+            self.createOppositeOrder(source_order)
+            del self.forwardInFlights[order_filled_event.order_id]
+            return
+        
+        source_order=self.oppositeInFlights.get(order_filled_event.order_id,None)
+        if source_order is not None:
+            self.doneInFlights[source_order.exchange_order_id]=time.time()
+            del self.oppositeInFlights[order_filled_event.order_id]
+            return
+
+        
+
+    def did_create_sell_order(self, order_created_event: SellOrderCreatedEvent):
+        logging.getLogger(__name__).info("create_sell_order price:{} amount:{} order_side:{}".format(order_created_event.order.price,order_created_event.order.amount,order_created_event.order.order_side))
+    
+    def did_fail_order(self, order_failed_event: MarketOrderFailureEvent):
+        logging.getLogger(__name__).info("fail_order price:{} amount:{} order_side:{}".format(order_failed_event.order.price,order_failed_event.order.amount,order_failed_event.order.order_side))
+    
+    def did_cancel_order(self, cancelled_event: OrderCancelledEvent):
+        logging.getLogger(__name__).info("cancel_order price:{} amount:{} order_side:{}".format(cancelled_event.order.price,cancelled_event.order.amount,cancelled_event.order.order_side))
+    
+    def did_expire_order(self, expired_event: OrderExpiredEvent):
+        logging.getLogger(__name__).info("expire_order price:{} amount:{} order_side:{}".format(expired_event.order.price,expired_event.order.amount,expired_event.order.order_side))
+    
+    def did_complete_buy_order(self, order_completed_event: BuyOrderCompletedEvent):
+        logging.getLogger(__name__).info("complete_buy_order price:{} amount:{} order_side:{}".format(order_completed_event.order.price,order_completed_event.order.amount,order_completed_event.order.order_side))
+    
+    def did_complete_sell_order(self, order_completed_event: SellOrderCompletedEvent):
+        logging.getLogger(__name__).info("complete_sell_order price:{} amount:{} order_side:{}".format(order_completed_event.order.price,order_completed_event.order.amount,order_completed_event.order.order_side))
+    
+    def did_complete_funding_payment(self, funding_payment_completed_event: FundingPaymentCompletedEvent):
+        logging.getLogger(__name__).info("complete_funding_payment price:{} amount:{} order_side:{}".format(funding_payment_completed_event.payment.amount,funding_payment_completed_event.payment.amount,funding_payment_completed_event.payment.order_side))
+    
+    def did_change_position_mode_succeed(self, position_mode_changed_event: PositionModeChangeEvent):
+        logging.getLogger(__name__).info("change_position_mode_succeed price:{} amount:{} order_side:{}".format(position_mode_changed_event.new_position_mode,position_mode_changed_event.new_position_mode,position_mode_changed_event.new_position_mode))
+    
+    def did_change_position_mode_fail(self, position_mode_changed_event: PositionModeChangeEvent):
+        logging.getLogger(__name__).info("change_position_mode_fail price:{} amount:{} order_side:{}".format(position_mode_changed_event.new_position_mode,position_mode_changed_event.new_position_mode,position_mode_changed_event.new_position_mode))
+    
+    def did_add_liquidity(self, add_liquidity_event: RangePositionLiquidityAddedEvent):
+        logging.getLogger(__name__).info("add_liquidity price:{} amount:{} order_side:{}".format(add_liquidity_event.added_amount,add_liquidity_event.added_amount,add_liquidity_event.added_amount))
+    
+    def did_remove_liquidity(self, remove_liquidity_event: RangePositionLiquidityRemovedEvent):
+        logging.getLogger(__name__).info("remove_liquidity price:{} amount:{} order_side:{}".format(remove_liquidity_event.removed_amount,remove_liquidity_event.removed_amount,remove_liquidity_event.removed_amount))
+    
+    def did_update_lp_order(self, update_lp_event: RangePositionUpdateEvent):
+        logging.getLogger(__name__).info("update_lp_order price:{} amount:{} order_side:{}".format(update_lp_event.new_price,update_lp_event.new_price,update_lp_event.new_price))
+    
+    def did_fail_lp_update(self, fail_lp_update_event: RangePositionUpdateFailureEvent):
+        logging.getLogger(__name__).info("fail_lp_update price:{} amount:{} order_side:{}".format(fail_lp_update_event.new_price,fail_lp_update_event.new_price,fail_lp_update_event.new_price))
+    
+    def did_collect_fee(self, collect_fee_event: RangePositionFeeCollectedEvent):
+        logging.getLogger(__name__).info("collect_fee price:{} amount:{} order_side:{}".format(collect_fee_event.fee_amount,collect_fee_event.fee_amount,collect_fee_event.fee_amount))
+    
+    def did_close_position(self, closed_position_event: RangePositionClosedEvent):
+        logging.getLogger(__name__).info("close_position price:{} amount:{} order_side:{}".format(closed_position_event.profit_loss,closed_position_event.profit_loss,closed_position_event.profit_loss))
+     
+    """
     def get_right_fee(self,order):
         base_currency = self.trading_pair.split("-")[0]
         quote_currency = self.trading_pair.split("-")[1]
@@ -159,48 +323,12 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         price = order.price
         fee=self.connectors[self.right_market].get_fee(base_currency, quote_currency, OrderType.LIMIT_MAKER, TradeType.BUY, amount, price)
         return float(order.amount)*float(order.price)*float(fee.percent)
-   
+    """
+    """
     def get_left_mid_price(self):
         return self.connectors[self.left_market].get_mid_price(self.trading_pair)
-    
-
-       
+    """
+    """
     def get_left_order_book(self):
         return self.connectors[self.left_market].get_order_book(self.trading_pair)
-    
-    def get_right_order_book(self):
-        return self.connectors[self.right_market].get_order_book(self.trading_pair)
-
-    def get_right_best_bid(self):
-        return self.connectors[self.right_market].get_price_by_type(self.trading_pair, PriceType.BestBid)
-
-    def get_left_asks(self):
-        return self.get_left_order_book().ask_entries()
-    
-    
-    def get_right_best_bid(self,ask):
-        bids=self.get_right_order_book().bid_entries()
-        diff=0
-        min_bid= None
-        for bid in bids:
-            if (ask.price-(bid.price))>diff and ask.amount<=bid.amount:
-                diff=ask.price-(bid.price)
-                min_bid=bid
-            
-        if min_bid is None:
-            return None
-        
-        return min_bid
-    
-    def place_order(self, connector_name: str, order: OrderCandidate):
-        if order.order_side == TradeType.SELL:
-            clientid=self.sell(connector_name=connector_name, trading_pair=order.trading_pair, amount=order.amount,
-                      order_type=order.order_type, price=order.price)
-        elif order.order_side == TradeType.BUY:
-            clientid=self.buy(connector_name=connector_name, trading_pair=order.trading_pair, amount=order.amount,
-                     order_type=order.order_type, price=order.price)
-    def cancel_all_orders(self):
-        for order in self.get_active_orders(connector_name=self.left_market):
-            self.cancel(self.left_market, order.trading_pair, order.client_order_id)
-        for order in self.get_active_orders(connector_name=self.right_market):
-            self.cancel(self.right_market, order.trading_pair, order.client_order_id)
+    """

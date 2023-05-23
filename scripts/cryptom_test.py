@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -6,6 +7,7 @@ from decimal import Decimal
 from typing import List
 
 import redis
+from hummingbot.core.utils.async_utils import safe_ensure_future
 
 from hummingbot.client.settings import ConnectorSetting
 from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
@@ -98,49 +100,20 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
             return False
         
 
+    async def update_orders(self):
+        cryptom = self.connectors[self.left_market]
+        orders = await cryptom.get_all_orders("ETH-USDT")
+        return orders
+
     def on_tick(self):
-        if int(time.time()) % self.process_interval>0:
-            return
-
-
-        #logging.getLogger(__name__).info("CMM: Tick")        
-        if self.updateParams():
-            logging.getLogger(__name__).info("update params success")
-            return
-        
-
-        binancemidprice=self.connectors[self.right_market].get_mid_price(self.trading_pair)
-        cryptommidprice=self.connectors[self.left_market].get_mid_price(self.trading_pair)
         try:
-            left_asks=self.get_left_asks()
-            newOrders=self.filterNotProcessedByBotInLeft(left_asks)
-            logging.getLogger(__name__).info("CMM: neworders count {} ".format(len(newOrders)))
-            for newOrder in newOrders:
-                if self.isAsk(newOrder):
-                    bid=self.get_right_best_bid(order=newOrder)
-                    if bid is None:
-                        continue
-                    self.createOppositeForAsk(newOrder,bid)
-                else:
-                    ask=self.get_right_best_ask(order=newOrder)
-                    if ask is None:
-                        continue
-                    self.createOppositeForBid(ask,newOrder)
-
-            #clean orders according to timeout
-            self.clean_left_orders(self.order_timeout_second)
-            self.clean_right_orders(self.order_timeout_second)
+            print("do--------------------------------------------------")
+            allorders=self.connectors[self.left_market].order_book_tracker.data_source.AllMarketOrders
+            print("allorders",allorders)
+            self.status["config"] = self.config
+            self.update_status()
         except Exception as e:
             print(e)
-
-        self.status["time"]=time.time()
-        self.status["left_bot_orders_count"]=len(self.left_bot_orders())
-        self.status["right_bot_orders_count"]=len(self.right_bot_orders())
-        self.status["cryptom_mid_price"]=float(cryptommidprice)
-        self.status["binance_mid_price"]=float(binancemidprice)
-        self.status["config"]=self.config
-
-        self.update_status()
     def clean_left_orders(self,timeout_second):
         left_orders=self.left_bot_orders()
         for order in left_orders:
