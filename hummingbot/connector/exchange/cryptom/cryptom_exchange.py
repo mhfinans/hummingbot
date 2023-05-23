@@ -1,13 +1,17 @@
-from ast import excepthandler
 import asyncio
+import datetime
+from ast import excepthandler
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from bidict import bidict
-from hummingbot.connector.exchange.bitfinex import OrderStatus
-from hummingbot.connector.exchange.cryptom.cryptom_auth import CryptomAuth
 
-from hummingbot.connector.exchange.cryptom import cryptom_constants as CONSTANTS, cryptom_utils, cryptom_web_utils as web_utils
+from hummingbot.connector.exchange.bitfinex import OrderStatus
+from hummingbot.connector.exchange.cryptom import (
+    cryptom_constants as CONSTANTS,
+    cryptom_utils,
+    cryptom_web_utils as web_utils,
+)
 from hummingbot.connector.exchange.cryptom.cryptom_api_order_book_data_source import CryptomAPIOrderBookDataSource
 from hummingbot.connector.exchange.cryptom.cryptom_api_user_stream_data_source import CryptomAPIUserStreamDataSource
 from hummingbot.connector.exchange.cryptom.cryptom_auth import CryptomAuth
@@ -23,8 +27,6 @@ from hummingbot.core.data_type.user_stream_tracker_data_source import UserStream
 from hummingbot.core.utils.estimate_fee import build_trade_fee
 from hummingbot.core.web_assistant.connections.data_types import RESTMethod
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
-import datetime
-
 
 if TYPE_CHECKING:
     from hummingbot.client.config.config_helpers import ClientConfigAdapter

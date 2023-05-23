@@ -1,7 +1,7 @@
 import asyncio
 import datetime
-from decimal import Decimal
 import time
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from hummingbot.connector.exchange.cryptom import cryptom_constants as CONSTANTS, cryptom_web_utils as web_utils

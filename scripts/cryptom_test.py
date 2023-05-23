@@ -7,7 +7,6 @@ from decimal import Decimal
 from typing import List
 
 import redis
-from hummingbot.core.utils.async_utils import safe_ensure_future
 
 from hummingbot.client.settings import ConnectorSetting
 from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
@@ -30,6 +29,7 @@ from hummingbot.core.event.events import (
     SellOrderCompletedEvent,
     SellOrderCreatedEvent,
 )
+from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 
 
