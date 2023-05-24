@@ -28,6 +28,7 @@ from hummingbot.core.event.events import (
     SellOrderCompletedEvent,
     SellOrderCreatedEvent,
 )
+from hummingbot.model.order_status import OrderStatus
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 
 
@@ -129,7 +130,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
                 elif newOrder.order_type==OrderType.MARKET:
                     self.createMarketForwardOrder(newOrder)
 
-
+            self.checkLeftCancels()
         except Exception as e:
             print(e)
 
@@ -152,15 +153,13 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         self.forwardInFlights[order_client_id]=source_order
     
     def createMarketForwardOrder(self,source_order):
-        right_mid_price=self.connectors[self.right_market].get_mid_price(self.trading_pair)
-        order_client_id=self.place_order(connector_name=self.right_market, order=self.create_order(source_order.amount,right_mid_price,OrderType.MARKET,TradeType.SELL if self.isAsk(source_order) else TradeType.BUY))
+        #right_mid_price=self.connectors[self.right_market].get_mid_price(self.trading_pair)
+        order_client_id=self.place_order(connector_name=self.right_market, order=self.create_order(source_order.amount,None,OrderType.MARKET,TradeType.SELL if self.isAsk(source_order) else TradeType.BUY))
         self.forwardInFlights[order_client_id]=source_order
     
-    def createOppositeOrder(self,source_order):
-        order_client_id=self.place_order(connector_name=self.left_market, order=self.create_order(source_order.amount,source_order.price,source_order.order_type,TradeType.BUY if self.isAsk(source_order) else TradeType.SELL))
+    def createOppositeOrder(self,source_order,price):
+        order_client_id=self.place_order(connector_name=self.left_market, order=self.create_order(source_order.amount,price,OrderType.LIMIT,TradeType.BUY if self.isAsk(source_order) else TradeType.SELL))
         self.oppositeInFlights[order_client_id]=source_order
-    
-
    
     def  newOrdersFromLeft(self):
         result=[]
@@ -184,6 +183,7 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
                     break
             if add:
                 result.append(i_source_order)
+
         logging.getLogger(__name__).info("new left orders: {}/{}".format(len(result),len(all_left_orders)))
         return result
          
@@ -196,8 +196,11 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         
     def create_order(self,amount,price,order_type,order_side):
         logging.getLogger(__name__).info("create_limit_order price:{} amount:{} order_side:{}".format(amount,price,order_side)),
-        return OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=order_type,
-                                        order_side=order_side, amount=Decimal(amount), price=Decimal(price))
+        result=OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=order_type,
+                                        order_side=order_side,price=0 ,amount=Decimal(amount))
+        if price is not None:
+            result.price=Decimal(price)
+        return result
         
    
 
@@ -241,16 +244,10 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
     def place_order(self, connector_name: str, order: OrderCandidate):
         if order.order_side == TradeType.SELL:
             return self.sell(connector_name=connector_name, trading_pair=order.trading_pair, amount=order.amount,
-                      order_type=order.order_type, price=order.price)
+                      order_type=order.order_type, price= order.price if order.price >0 else  Decimal("NaN"))
         elif order.order_side == TradeType.BUY:
             return self.buy(connector_name=connector_name, trading_pair=order.trading_pair, amount=order.amount,
-                     order_type=order.order_type, price=order.price)
-    
-    def cancel_all_orders(self):
-        for order in self.get_active_orders(connector_name=self.left_market):
-            self.cancel(self.left_market, order.trading_pair, order.client_order_id)
-        for order in self.get_active_orders(connector_name=self.right_market):
-            self.cancel(self.right_market, order.trading_pair, order.client_order_id)
+                     order_type=order.order_type, price= order.price if order.price >0 else  Decimal("NaN"))
     
             
     def did_fill_order(self, order_filled_event: OrderFilledEvent):
@@ -258,7 +255,8 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
         
         source_order=self.forwardInFlights.get(order_filled_event.order_id,None)
         if source_order is not None:
-            self.createOppositeOrder(source_order)
+            price=order_filled_event.price
+            self.createOppositeOrder(source_order,price)
             del self.forwardInFlights[order_filled_event.order_id]
             return
         
@@ -268,7 +266,22 @@ class CryptomSimpleCrossMM(ScriptStrategyBase):
             del self.oppositeInFlights[order_filled_event.order_id]
             return
 
-        
+    def checkLeftCancels(self):
+        all_orders=[]
+        for item in self.get_left_market_orders():
+            if item.is_open:
+                all_orders.append(item.exchange_order_id)
+
+        for client_order_id,source_order in self.forwardInFlights.items():
+            if source_order.exchange_order_id not in all_orders:
+                self.cancel(self.right_market, self.trading_pair, client_order_id)
+                del self.forwardInFlights[client_order_id]
+                
+        for client_order_id,source_order in self.oppositeInFlights.items():
+            if source_order.exchange_order_id not in all_orders:
+                self.cancel(self.left_market, self.trading_pair, client_order_id)
+                del self.oppositeInFlights[client_order_id]
+            
 
     def did_create_sell_order(self, order_created_event: SellOrderCreatedEvent):
         logging.getLogger(__name__).info("create_sell_order price:{} amount:{} order_side:{}".format(order_created_event.order.price,order_created_event.order.amount,order_created_event.order.order_side))

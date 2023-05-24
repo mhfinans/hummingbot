@@ -32,7 +32,7 @@ class CryptomAPIOrderBookDataSource(OrderBookTrackerDataSource):
         super().__init__(trading_pairs)
         self._connector = connector
         self._api_factory = api_factory
-        self.FULL_ORDER_BOOK_RESET_DELTA_SECONDS=10
+        self.FULL_ORDER_BOOK_RESET_DELTA_SECONDS=1
         self.KEEP_ORDER_DATA=True
 
     async def get_last_traded_prices(self,

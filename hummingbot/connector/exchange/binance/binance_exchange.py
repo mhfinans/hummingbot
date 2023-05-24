@@ -116,7 +116,7 @@ class BinanceExchange(ExchangePyBase):
         return self._trading_required
 
     def supported_order_types(self):
-        return [OrderType.LIMIT, OrderType.LIMIT_MAKER]
+        return [OrderType.MARKET,OrderType.LIMIT, OrderType.LIMIT_MAKER]
 
     async def get_all_pairs_prices(self) -> List[Dict[str, str]]:
         pairs_prices = await self._api_get(path_url=CONSTANTS.TICKER_BOOK_PATH_URL)
@@ -181,7 +181,10 @@ class BinanceExchange(ExchangePyBase):
                       "quantity": amount_str,
                       "type": type_str,
                       "newClientOrderId": order_id,
-                      "price": price_str}
+                      }
+        if order_type is not OrderType.MARKET:
+            api_params["price"]=price_str
+
         if order_type == OrderType.LIMIT:
             api_params["timeInForce"] = CONSTANTS.TIME_IN_FORCE_GTC
 
